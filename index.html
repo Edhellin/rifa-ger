@@ -2,12 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<title>Gran Rifa GER</title>
+<meta property="og:title" content="Gran Rifa GER">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" href="icono-pakua-192.png">
 <link rel="apple-touch-icon" href="icono-pakua-192.png">
 </head>
 <body>
-<title>Gran Rifa GER</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Oswald:wght@500;700&display=swap">
@@ -546,10 +547,20 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
   function llamar(fn, args) {
     if (REMOTO) {
       // POST con cuerpo text/plain: sin preflight; Apps Script redirige a googleusercontent y fetch lo sigue solo.
+      // Tope de 45 s (el lock del servidor espera hasta 20 s): si no contesta, la pantalla no queda colgada.
+      var ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var tope = ac ? setTimeout(function () { ac.abort(); }, 45000) : 0;
+      var deServidor = function (msg) { var e = new Error(msg); e.servidor = true; return e; };
       return fetch(EXEC, { method: 'POST', body: JSON.stringify({ fn: fn, args: args || [] }), redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' } })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (j) { if (!j || !j.ok) throw new Error((j && j.error) || 'Respuesta inválida'); return j.r; });
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, signal: ac ? ac.signal : undefined })
+        .then(function (r) {
+          if (!r.ok) throw deServidor('HTTP ' + r.status);
+          return r.text().then(function (t) {
+            try { return JSON.parse(t); } catch (e) { throw deServidor('contestó algo que no es de la rifa (¿falta publicar la versión nueva del script?)'); }
+          });
+        })
+        .then(function (j) { if (!j || !j.ok) throw deServidor((j && j.error) || 'respuesta inválida'); return j.r; })
+        .finally(function () { clearTimeout(tope); });
     }
     return new Promise(function (res, rej) {
       var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
@@ -580,6 +591,10 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
       cobrado: function (v, id, val) { ventas.forEach(function (x) { if (x.id === id) x.cobrado = val; }); return esperar(mias(v)); }
     };
   })();
+  // Texto para la persona: distingue «no hubo conexión» de «la planilla contestó con un error».
+  function msgError(err, sinRed) {
+    return err && err.servidor ? 'La planilla contestó con un error: ' + err.message + '. Si sigue, avisale a quien coordina.' : sinRed;
+  }
   var api = (REAL || REMOTO) ? {
     datos: function () { return llamar('apiDatos'); },
     vender: function (d) { return llamar('apiVender', [d]); },
@@ -622,8 +637,8 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
       if (VISTA === 'libres' || location.hash === '#libres') show('libres');
       else if (saved && d.vendedores.indexOf(saved) >= 0) { setSeller(saved); retomarPendiente(); }
       else show('quien');
-    }, function () {
-      $('load-msg').textContent = 'No pudimos cargar la rifa. Revisá que tengas internet y probá de nuevo.';
+    }, function (err) {
+      $('load-msg').textContent = msgError(err, 'No pudimos cargar la rifa. Revisá que tengas internet y probá de nuevo.');
       $('load-retry').hidden = false;
     });
   }
@@ -793,9 +808,9 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
         } else {
           $('save-msg').textContent = r.error || 'No se pudo guardar.';
         }
-      }, function () {
+      }, function (err) {
         fin();
-        $('save-msg').textContent = 'No se pudo guardar. Revisá que tengas internet y tocá Confirmar de nuevo.';
+        $('save-msg').textContent = msgError(err, 'No se pudo guardar. Revisá que tengas internet y tocá Confirmar de nuevo.');
       });
   });
 
@@ -1005,7 +1020,7 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
   // ── Mis ventas ──
   function loadMine() {
     $('mis-msg').textContent = 'Cargando tus ventas…'; $('sales').innerHTML = '';
-    api.mis(st.seller).then(renderMine, function () { $('mis-msg').textContent = 'No pudimos traer tus ventas. Revisá que tengas internet.'; });
+    api.mis(st.seller).then(renderMine, function (err) { $('mis-msg').textContent = msgError(err, 'No pudimos traer tus ventas. Revisá que tengas internet.'); });
   }
   function renderMine(lista) {
     var nums = 0, paid = 0, due = 0, ul = $('sales'); ul.innerHTML = '';
@@ -1027,7 +1042,7 @@ details.more summary { cursor: pointer; font-weight: 700; min-height: 2.75rem; d
         else { b.type = 'button'; b.className = 'link'; b.textContent = 'Marcar que no pagó'; }
         b.addEventListener('click', function () {
           b.disabled = true;
-          api.cobrado(st.seller, s.id, !s.cobrado).then(renderMine, function () { b.disabled = false; $('mis-msg').textContent = 'No se pudo guardar. Probá de nuevo.'; });
+          api.cobrado(st.seller, s.id, !s.cobrado).then(renderMine, function (err) { b.disabled = false; $('mis-msg').textContent = msgError(err, 'No se pudo guardar. Probá de nuevo.'); });
         });
         li.appendChild(b);
       }
