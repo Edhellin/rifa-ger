@@ -516,7 +516,7 @@ details.more[open] summary::before { content: "▾"; }
   // Los reemplaza el script de Google al servir la página. Fuera de Google quedan así y la página usa datos de ejemplo.
   var MODO = "remoto";
   var VISTA = "vender";
-  var EXEC = "https://script.google.com/macros/s/AKfycbxSdvMTkQfRoL0Ettzz1umXiwYwvcG6PyN289oZYlKX612yLtLnzxKeVvTlat8MV3s32Q/exec"; // en modo remoto: la URL /exec de la planilla
+  var EXEC = "https://script.google.com/macros/s/AKfycby4H9IOUcKnYW4tKYDDWcdBiiK0uNS24R3iAp_MCKpgcfJkTh7EhwPKJ1giI6D9p-be/exec"; // en modo remoto: la URL /exec de la planilla
   var REAL = MODO === 'real' && typeof google !== 'undefined' && google.script && google.script.run;
   var REMOTO = MODO === 'remoto' && /^https:/.test(EXEC);
   if (REMOTO && /[?&]vista=libres/.test(location.search)) VISTA = 'libres';
